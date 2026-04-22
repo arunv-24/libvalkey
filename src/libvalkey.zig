@@ -17,6 +17,7 @@ pub const Client = struct {
     allocator: std.mem.Allocator,
     ctx: valkey_ffi.ValkeyContext,
     consecutive_failures: u32,
+    consecutive_successes: u32,
     is_healthy: bool,
 
     /// Number of connection attempts before giving up
@@ -43,6 +44,7 @@ pub const Client = struct {
                     .allocator = allocator,
                     .ctx = ctx,
                     .consecutive_failures = 0,
+                    .consecutive_successes = 0,
                     .is_healthy = true,
                 };
             } else |err| {
@@ -70,14 +72,18 @@ pub const Client = struct {
 
         if (reply.type != valkey_ffi.VALKEY_REPLY_STATUS) {
             self.consecutive_failures += 1;
+            self.consecutive_successes = 0;
             if (self.consecutive_failures >= CIRCUIT_BREAKER_THRESHOLD) {
                 self.is_healthy = false;
             }
             return error.CommandFailed;
         }
 
-        self.consecutive_failures = 0;
-        self.is_healthy = true;
+        self.consecutive_successes += 1;
+        if (self.consecutive_successes >= CIRCUIT_BREAKER_RESET_COUNT) {
+            self.consecutive_failures = 0;
+            self.is_healthy = true;
+        }
         const len: usize = @intCast(reply.len);
         const str = reply.str[0..len];
         return try self.allocator.dupe(u8, str);
@@ -148,7 +154,7 @@ pub const Client = struct {
         const seconds_str = try self.allocator.alloc(u8, 20);
         defer self.allocator.free(seconds_str);
         const seconds_len = std.fmt.bufPrint(seconds_str, "{d}", .{seconds}) catch return error.CommandFailed;
-        const reply = try self.ctx.command(&.{ "EXPIRE", key, seconds_len });
+        const reply = try self.ctx.command(&.{ "EXPIRE", key, seconds_str[0..seconds_len.len] });
         defer valkey_ffi.freeReplyObject(reply);
 
         if (reply.type != valkey_ffi.VALKEY_REPLY_INTEGER) {
@@ -169,6 +175,7 @@ test "Client: initialization requires allocator and connection params" {
         .allocator = undefined,
         .ctx = undefined,
         .consecutive_failures = 0,
+        .consecutive_successes = 0,
         .is_healthy = true,
     };
     _ = dummy_client;
@@ -211,8 +218,10 @@ test "Client: health check state initialized correctly" {
         .allocator = allocator,
         .ctx = undefined,
         .consecutive_failures = 0,
+        .consecutive_successes = 0,
         .is_healthy = true,
     };
     try std.testing.expectEqual(@as(u32, 0), client.consecutive_failures);
+    try std.testing.expectEqual(@as(u32, 0), client.consecutive_successes);
     try std.testing.expect(client.is_healthy);
 }

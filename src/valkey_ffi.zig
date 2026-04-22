@@ -48,6 +48,7 @@ pub const ValkeyError = error{
     CommandFailed,
     InvalidReplyType,
     CommandError,
+    InvalidArguments,
 };
 
 /// Valkey context wrapper for command execution
@@ -159,7 +160,7 @@ pub const ValkeyContext = struct {
         const reply = try self.command(&.{ "SMEMBERS", key });
         defer freeReplyObject(reply);
 
-        var result: std.ArrayList([]u8) = .empty;
+        var result: std.ArrayList([]u8) = .init(self.allocator);
 
         if (reply.type == VALKEY_REPLY_NIL) {
             // Key doesn't exist, return empty array
@@ -231,7 +232,7 @@ pub const ValkeyContext = struct {
         const reply = try self.command(&.{ "HGETALL", key });
         defer freeReplyObject(reply);
 
-        var result: std.ArrayList([]u8) = .empty;
+        var result: std.ArrayList([]u8) = .init(self.allocator);
 
         if (reply.type == VALKEY_REPLY_NIL) {
             // Key doesn't exist, return empty array
