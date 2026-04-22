@@ -4,3 +4,9 @@ compile_commands.json
 .cache
 /build*
 tags
+.DS_Store
+.jj
+*.o
+.zig-cache
+zig-out/
+zig-pkg/
