@@ -2,7 +2,6 @@ obj
 lib
 compile_commands.json
 .cache
-/build*
 tags
 .DS_Store
 .jj
